@@ -272,7 +272,7 @@ class AppController(QObject):
                 self._cu_thread = ComputerUseThread(
                     cu_agent=self._cu_agent,
                     capture_fn=self._capture.capture_single,
-                    user_goal=c.cu_goal or "查看聊天界面，如果对方发来新消息，请生成自然口语化的回复并点击发送；如无新消息则直接完成。",
+                    user_goal=c.cu_goal or "观察当前屏幕，根据需要执行操作；如果没有需要处理的事情就直接完成。",
                     reply_limit=c.reply_limit_per_hour,
                     poll_interval_range=(c.poll_interval_min, c.poll_interval_max),
                 )
@@ -703,44 +703,6 @@ class ApiTestThread(QThread):
         self.finished_with_result.emit(vl_ok, agent_ok, " | ".join(detail_parts))
 
 
-def _activate_wechat_window():
-    """把企业微信主窗口拉到前台（恢复最小化 + 置顶），
-    避免被其他窗口遮挡导致 CU 截图看到错误界面而 wait 死循环。"""
-    user32 = ctypes.windll.user32
-    SW_RESTORE = 9
-    hwnd = user32.FindWindowW(None, "企业微信")
-    if not hwnd:
-        # 尝试模糊匹配（部分版本标题可能带其他字符）
-        import ctypes.wintypes
-
-        found = []
-
-        def _cb(h, _):
-            length = user32.GetWindowTextLengthW(h)
-            if length > 0:
-                buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(h, buf, length + 1)
-                if "企业微信" in buf.value or "WeCom" in buf.value:
-                    found.append(h)
-            return True
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool,
-                                         ctypes.wintypes.HWND,
-                                         ctypes.wintypes.LPARAM)
-        user32.EnumWindows(WNDENUMPROC(_cb), 0)
-        if found:
-            hwnd = found[0]
-
-    if hwnd:
-        try:
-            user32.ShowWindow(hwnd, SW_RESTORE)
-            user32.SetForegroundWindow(hwnd)
-            time.sleep(0.3)
-            log.debug("已将企业微信窗口拉到前台")
-        except Exception as e:
-            log.warning(f"激活企业微信窗口失败: {e}")
-
-
 class ComputerUseThread(QThread):
     """
     Computer Use 工作线程
@@ -777,9 +739,6 @@ class ComputerUseThread(QThread):
             if self._reply_count >= self._reply_limit:
                 log.warning(f"Computer Use 达到每小时回复上限({self._reply_limit})，停止")
                 break
-
-            # 每轮开始前把企业微信窗口拉到前台，避免被其他窗口遮挡导致 wait 死循环
-            _activate_wechat_window()
 
             # 执行一轮 Computer Use 循环（每次读取最新的 user_goal）
             result = self._cu_agent.run(

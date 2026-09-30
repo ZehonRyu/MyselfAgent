@@ -62,6 +62,8 @@ INPUT_KEYBOARD = 1
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_WHEEL = 0x0800
 MOUSEEVENTF_ABSOLUTE = 0x8000
 
@@ -263,6 +265,115 @@ def _human_click(x: int, y: int,
     log.debug(f"点击完成: ({x},{y})")
 
 
+def _human_right_click(x: int, y: int,
+                       speed_min: float = 200.0,
+                       speed_max: float = 500.0,
+                       jitter: int = 3,
+                       move_mode: str = "human"):
+    """真人化右键点击"""
+    _human_move_to(x, y, speed_min, speed_max, jitter, mode=move_mode)
+    time.sleep(random.uniform(0.02, 0.08))
+    _send_mouse_input(MOUSEEVENTF_RIGHTDOWN)
+    time.sleep(random.uniform(0.05, 0.13))
+    _send_mouse_input(MOUSEEVENTF_RIGHTUP)
+    log.debug(f"右键点击完成: ({x},{y})")
+
+
+def _human_double_click(x: int, y: int,
+                        speed_min: float = 200.0,
+                        speed_max: float = 500.0,
+                        jitter: int = 3,
+                        move_mode: str = "human"):
+    """真人化双击"""
+    _human_move_to(x, y, speed_min, speed_max, jitter, mode=move_mode)
+    time.sleep(random.uniform(0.02, 0.06))
+    for _ in range(2):
+        _send_mouse_input(MOUSEEVENTF_LEFTDOWN)
+        time.sleep(random.uniform(0.03, 0.07))
+        _send_mouse_input(MOUSEEVENTF_LEFTUP)
+        time.sleep(random.uniform(0.03, 0.07))
+    log.debug(f"双击完成: ({x},{y})")
+
+
+def _human_drag(x1: int, y1: int, x2: int, y2: int,
+                speed_min: float = 200.0,
+                speed_max: float = 500.0,
+                jitter: int = 3,
+                move_mode: str = "human"):
+    """真人化拖拽：按下起点 → 移动到终点 → 抬起"""
+    _human_move_to(x1, y1, speed_min, speed_max, jitter, mode=move_mode)
+    time.sleep(random.uniform(0.03, 0.08))
+    _send_mouse_input(MOUSEEVENTF_LEFTDOWN)
+    time.sleep(random.uniform(0.05, 0.12))
+    _human_move_to(x2, y2, speed_min, speed_max, jitter, mode=move_mode)
+    time.sleep(random.uniform(0.03, 0.08))
+    _send_mouse_input(MOUSEEVENTF_LEFTUP)
+    log.debug(f"拖拽完成: ({x1},{y1}) -> ({x2},{y2})")
+
+
+# 常用虚拟键码映射（hotkey 动作用）
+_VK_MAP = {
+    "ctrl": 0x11, "control": 0x11,
+    "alt": 0x12, "menu": 0x12,
+    "shift": 0x10,
+    "win": 0x5B, "cmd": 0x5B, "super": 0x5B,
+    "enter": 0x0D, "return": 0x0D,
+    "esc": 0x1B, "escape": 0x1B,
+    "tab": 0x09,
+    "space": 0x20,
+    "backspace": 0x08, "bs": 0x08,
+    "delete": 0x2E, "del": 0x2E,
+    "home": 0x24, "end": 0x23,
+    "pgup": 0x21, "pageup": 0x21,
+    "pgdn": 0x22, "pagedown": 0x22,
+    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73,
+    "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77,
+    "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
+}
+
+
+def _parse_hotkey(hotkey_str: str) -> List[int]:
+    """解析快捷键字符串，如 'ctrl+c'、'ctrl+shift+t'、'enter'，返回虚拟键码列表"""
+    keys = []
+    for part in hotkey_str.lower().split("+"):
+        part = part.strip()
+        if not part:
+            continue
+        if part in _VK_MAP:
+            keys.append(_VK_MAP[part])
+        elif len(part) == 1:
+            # 单字母/数字
+            vk = ctypes.windll.user32.VkKeyScanW(ord(part))
+            if vk != -1:
+                keys.append(vk & 0xFF)
+        else:
+            log.warning(f"hotkey 无法识别的按键: {part}")
+    return keys
+
+
+def _human_hotkey(vk_codes: List[int]):
+    """按顺序按下修饰键，再按主键，再反向抬起"""
+    if not vk_codes:
+        return
+    # 按下（修饰键先）
+    for vk in vk_codes:
+        ki = _KEYBDINPUT(wVk=vk, wScan=0, dwFlags=KEYEVENTF_KEYDOWN,
+                         time=0, dwExtraInfo=0)
+        inp = _INPUT(type=INPUT_KEYBOARD)
+        inp._input.ki = ki  # type: ignore
+        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+        time.sleep(random.uniform(0.02, 0.05))
+    # 抬起（主键先，修饰键后）
+    for vk in reversed(vk_codes):
+        ki = _KEYBDINPUT(wVk=vk, wScan=0, dwFlags=KEYEVENTF_KEYUP,
+                         time=0, dwExtraInfo=0)
+        inp = _INPUT(type=INPUT_KEYBOARD)
+        inp._input.ki = ki  # type: ignore
+        ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+        time.sleep(random.uniform(0.02, 0.05))
+
+
 def _human_type(text: str,
                 delay_min: float = 0.05,
                 delay_max: float = 0.15):
@@ -298,57 +409,46 @@ def _human_scroll(count: int,
 
 
 # ================================================================
-#  通用聊天界面分析提示词
+#  通用电脑操作 Agent 提示词
 # ================================================================
-CU_SYSTEM_PROMPT = """你是一个通用 PC 聊天软件界面操作 Agent。你将收到聊天窗口的截图，需要分析界面并输出下一步操作动作。
-
-## 支持的聊天软件
-本工具不限定特定软件，支持但不限于：
-- 微信（绿色气泡=自己，白色气泡=对方，左下输入框，右下发送按钮）
-- QQ（类似布局，气泡颜色可能不同）
-- 钉钉（DingTalk，输入框在底部，发送按钮在右下）
-- 飞书（Lark，输入框在底部）
-- Telegram Desktop
-- 其他常见 PC 聊天软件
+CU_SYSTEM_PROMPT = """你是一个通用的电脑操作助手。你将收到当前屏幕选区的截图，需要分析界面并输出下一步操作动作，逐步完成用户给出的目标。
 
 ## 你的任务
-根据用户给出的"回复目标"（在 user 消息中），完成一次完整的"查看新消息 → 输入回复 → 点击发送"流程。
-每一步你只需输出一个动作，系统会执行后再次截图让你判断下一步。
+用户会给出一个自然语言目标（在 user 消息中），你需要通过观察截图、执行动作、观察结果的循环来完成它。
+每一步只输出一个动作，系统执行后会再次截图让你判断下一步，直到目标完成或确定无法完成。
 
 ## 动作格式（严格 JSON，不要输出任何其他文字）
 {
-  "thought": "简短描述你对当前界面的分析和这一步要做什么",
+  "thought": "简短分析当前界面并说明这一步要做什么",
   "action": "动作类型",
   "coordinate": [x, y],
   "text": "要输入的文本",
   "scroll_count": 滚动次数,
-  "sent_to": "刚发送消息给谁（仅发送成功的那个 click 动作才填，其他动作省略此字段）",
   "done": false
 }
 
 ## 动作类型
-- "click": 点击 coordinate 指定的坐标。coordinate 必填。
-- "type": 先点击 coordinate 定位输入框，然后输入 text 文本。coordinate 和 text 必填。
-  可选字段 "send_with_enter": true —— 输入完成后自动按回车键发送消息（推荐，比点击发送按钮更可靠）。
-- "send": 按回车键发送当前输入框中的消息。无需 coordinate。用于消息已输入但未发出的情况。
-- "scroll": 在 coordinate 指定的区域滚动鼠标滚轮。coordinate 必填（指向要滚动的列表/区域，如联系人列表）。scroll_count > 0 向上滚，< 0 向下滚。
-- "wait": 不做任何操作，等待界面变化。通常用于发送后等待消息渲染。
-- "done": 任务完成，停止循环。done 字段设为 true。
+- "click": 左键单击 coordinate。coordinate 必填。
+- "right_click": 右键单击 coordinate。coordinate 必填。
+- "double_click": 双击 coordinate。coordinate 必填。
+- "type": 先点击 coordinate 定位输入框，然后输入 text。coordinate 和 text 必填。
+  可选 "send_with_enter": true —— 输入完自动按回车（适合聊天/搜索框提交）。
+- "send": 按回车键。无需 coordinate。用于提交输入框内容。
+- "scroll": 在 coordinate 区域滚动滚轮。coordinate 必填。scroll_count > 0 向上，< 0 向下。
+- "drag": 拖拽。coordinate 为起点，需额外字段 "end_coordinate": [x2, y2] 为终点。
+- "hotkey": 按快捷键。无需 coordinate，需字段 "hotkey": "ctrl+c"（支持 ctrl/alt/shift/win + 字母数字/功能键）。
+- "wait": 等待界面变化（如加载、渲染）。
+- "done": 目标已完成，停止循环。done 设为 true。
 
 ## 重要规则
-1. coordinate 是截图中的像素坐标，左上角为 [0,0]，右下角为 [图片宽度, 图片高度]。
-   你给出的坐标会被映射回实际屏幕坐标执行，必须在截图范围内。
-2. 每次只输出一个动作。不要试图在一次回复里完成多步。
-3. 发送消息**优先用 send 动作（按回车）或 type 的 send_with_enter:true**，不要反复点击发送按钮（按钮面积小容易点偏）。
-   典型流程：click 输入框 → type 回复内容（带 send_with_enter:true）→ wait 等待 → done
-4. 发送成功（消息出现在聊天区域）的那个动作（type 带 send_with_enter 或 send），必须带 "sent_to": "当前聊天对象的名字"。
-5. 系统会在 user 消息中给出"已发送名单"（任务记忆）：名单里的对象严禁重复发送；
-   逐个对照名单检查还剩哪些目标未处理，直到全部完成才输出 done。
-   名单里的对象不需要再点击验证，直接忽略。
-6. 回复语气要自然、口语化、简短（1-2句话），像真人打字，不要用 markdown。
-7. 如果界面没有新消息或不需要回复，直接输出 done。
-8. 如果连续两次点击同一坐标后界面无变化，说明没命中目标，应换一个坐标或改用其他动作。
-9. 只输出 JSON，不要有 markdown 标记、不要有解释文字。"""
+1. coordinate 是截图中的像素坐标，左上角 [0,0]，右下角 [图片宽度, 图片高度]，必须在截图范围内。
+2. 每次只输出一个动作，一步一步来。
+3. 优先用 hotkey 完成常见操作（如 ctrl+f 搜索、ctrl+c 复制、win+d 显示桌面），比点菜单更快更准。
+4. 提交输入优先用 send（回车）而非点击小按钮。
+5. 如果点击后界面无变化，可能没命中目标，换坐标或换动作。
+6. 不确定时用 wait 观察一下再决定，不要盲目重复同一动作。
+7. 目标完成就输出 done，不要多余操作。
+8. 只输出 JSON，不要有 markdown 标记或解释文字。"""
 
 
 # ================================================================
@@ -561,13 +661,13 @@ class ComputerUseAgent:
             # 构造历史动作描述
             history_text = self._format_history(history_actions)
 
-            # 任务记忆：已发送名单（防止重复发送与来回找目标）
+            # 任务记忆：已处理项（防止重复操作）
             if self._sent_targets:
                 sent_text = "、".join(self._sent_targets)
-                sent_note = (f"\n\n## 已发送名单（任务记忆）\n"
+                sent_note = (f"\n\n## 已完成项（任务记忆）\n"
                              f"{sent_text}\n"
-                             f"以上对象已成功发送过消息，**严禁重复发送**；"
-                             f"也不必再点击它们确认。若所有目标均已发送完毕，直接返回 done。")
+                             f"以上对象已处理过，**严禁重复操作**；"
+                             f"若所有目标均已完成，直接返回 done。")
             else:
                 sent_note = ""
 
@@ -583,7 +683,7 @@ class ComputerUseAgent:
             user_content = [
                 {
                     "type": "text",
-                    "text": (f"## 回复目标\n{user_goal}\n\n"
+                    "text": (f"## 任务目标\n{user_goal}\n\n"
                              f"## 已执行的动作\n{history_text}\n"
                              f"{sent_note}"
                              f"{effect_note}\n"
@@ -868,6 +968,73 @@ class ComputerUseAgent:
                                    self._jitter, mode=self._move_mode)
                     time.sleep(random.uniform(0.05, 0.15))
                 _human_scroll(scroll_count)
+            finally:
+                self._end_click_through()
+            return record
+
+        if action_type == "right_click":
+            if coord is None:
+                log.warning("CU right_click 缺少 coordinate，跳过")
+                record.action = "wait"
+                return record
+            sx, sy = self._map_to_screen(coord, img)
+            record.coordinate = [sx, sy]
+            log.info(f"CU 动作: right_click({sx},{sy}) - {thought}")
+            self._begin_click_through()
+            try:
+                _human_right_click(sx, sy, self._speed_min, self._speed_max,
+                                   self._jitter, move_mode=self._move_mode)
+            finally:
+                self._end_click_through()
+            return record
+
+        if action_type == "double_click":
+            if coord is None:
+                log.warning("CU double_click 缺少 coordinate，跳过")
+                record.action = "wait"
+                return record
+            sx, sy = self._map_to_screen(coord, img)
+            record.coordinate = [sx, sy]
+            log.info(f"CU 动作: double_click({sx},{sy}) - {thought}")
+            self._begin_click_through()
+            try:
+                _human_double_click(sx, sy, self._speed_min, self._speed_max,
+                                    self._jitter, move_mode=self._move_mode)
+            finally:
+                self._end_click_through()
+            return record
+
+        if action_type == "drag":
+            # coordinate 为起点，end_coordinate 为终点
+            end_coord = action_dict.get("end_coordinate")
+            if coord is None or end_coord is None:
+                log.warning("CU drag 缺少 coordinate 或 end_coordinate，跳过")
+                record.action = "wait"
+                return record
+            sx1, sy1 = self._map_to_screen(coord, img)
+            sx2, sy2 = self._map_to_screen(end_coord, img)
+            record.coordinate = [sx1, sy1]
+            log.info(f"CU 动作: drag({sx1},{sy1})->({sx2},{sy2}) - {thought}")
+            self._begin_click_through()
+            try:
+                _human_drag(sx1, sy1, sx2, sy2, self._speed_min, self._speed_max,
+                            self._jitter, move_mode=self._move_mode)
+            finally:
+                self._end_click_through()
+            return record
+
+        if action_type == "hotkey":
+            # hotkey 字段为快捷键字符串，如 "ctrl+c"、"win+d"
+            hotkey_str = action_dict.get("hotkey", "")
+            vk_codes = _parse_hotkey(hotkey_str)
+            if not vk_codes:
+                log.warning(f"CU hotkey 无法解析: {hotkey_str}")
+                record.action = "wait"
+                return record
+            log.info(f"CU 动作: hotkey({hotkey_str}) - {thought}")
+            self._begin_click_through()
+            try:
+                _human_hotkey(vk_codes)
             finally:
                 self._end_click_through()
             return record

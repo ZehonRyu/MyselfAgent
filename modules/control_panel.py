@@ -125,7 +125,7 @@ class ControlPanel(QWidget):
         self._connect_log_signal()
         self._connect_shortcuts()
 
-        self.setWindowTitle("聊天辅助工具 - 控制面板")
+        self.setWindowTitle("MyselfAgent - 屏幕助手控制面板")
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self.resize(560, 760)
         self.setMinimumSize(460, 540)
@@ -226,7 +226,7 @@ class ControlPanel(QWidget):
         title_layout.setContentsMargins(16, 12, 16, 12)
         title_layout.setSpacing(2)
 
-        title = QLabel("聊天辅助工具")
+        title = QLabel("MyselfAgent 屏幕助手")
         title.setFont(QFont("Microsoft YaHei", 15, QFont.Bold))
         title.setStyleSheet("color:#ffffff;background:transparent;")
         title.setAlignment(Qt.AlignCenter)
@@ -241,8 +241,8 @@ class ControlPanel(QWidget):
         main_layout.addWidget(title_bar)
 
         risk_label = QLabel(
-            "⚠ 风险提示：本工具为技术研究原型，自动操作聊天软件存在账号风控风险，"
-            "所有风险由使用者自行承担。"
+            "⚠ 风险提示：本工具为技术研究原型，可自动操作电脑，"
+            "请勿用于违法用途，所有风险由使用者自行承担。"
         )
         risk_label.setStyleSheet(
             "color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;"
@@ -390,7 +390,7 @@ class ControlPanel(QWidget):
         self._cfg_reply_limit = QSpinBox()
         self._cfg_reply_limit.setRange(1, 999)
         self._cfg_reply_limit.installEventFilter(self._wheel_guard)
-        f.addRow("每小时回复上限:", self._cfg_reply_limit)
+        f.addRow("每小时操作上限:", self._cfg_reply_limit)
         config_layout.addWidget(sec_basic)
 
         # —— VL 视觉模型 ——
@@ -498,8 +498,9 @@ class ControlPanel(QWidget):
         self._cfg_cu_goal = QTextEdit()
         self._cfg_cu_goal.setMaximumHeight(80)
         self._cfg_cu_goal.setPlaceholderText(
-            "Computer Use 模式的操作目标提示词，例如：\n"
-            "查看聊天界面，如果对方发来新消息，请生成自然口语化的回复并点击发送；如无新消息则直接完成。"
+            "输入你要完成的任务目标，例如：\n"
+            "打开浏览器搜索今天的天气；\n"
+            "给微信里的 daliu 发一条消息说自动化测试。"
         )
         self._cfg_cu_goal.setFont(QFont("Microsoft YaHei", 9))
         self._cfg_cu_goal.setStyleSheet(
@@ -511,7 +512,7 @@ class ControlPanel(QWidget):
         self._cfg_cu_goal.textChanged.connect(
             lambda: self.cu_goal_changed.emit(self._cfg_cu_goal.toPlainText().strip())
         )
-        f.addRow("CU操作提示词:", self._cfg_cu_goal)
+        f.addRow("任务目标:", self._cfg_cu_goal)
         config_layout.addWidget(sec_cu)
 
         # —— 存储与保存 ——
@@ -660,11 +661,11 @@ class ControlPanel(QWidget):
         if mode == "computer_use":
             self._mode_desc_label.setText(
                 "Computer Use 模式：截图→多模态LLM输出动作→键鼠执行→循环。"
-                "通用聊天软件（微信/QQ/钉钉/飞书等），只需 VL 多模态模型。"
+                "通用电脑操作，只需 VL 多模态模型。"
             )
         else:
             self._mode_desc_label.setText(
-                "VL+Agent 模式：定时快照→VL识别消息→AI Agent生成回复→键鼠发送。"
+                "VL+Agent 模式：定时快照→VL识别→AI Agent决策→键鼠执行。"
                 "需要 VL 和 Agent 两个模型。"
             )
 
